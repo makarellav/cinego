@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	"github.com/makarellav/cinego/internal/data"
 	"log/slog"
 	"net/http"
 	"os"
@@ -27,6 +28,7 @@ type config struct {
 type application struct {
 	config config
 	logger *slog.Logger
+	models *data.Models
 }
 
 func main() {
@@ -49,11 +51,6 @@ func main() {
 
 	flag.Parse()
 
-	app := &application{
-		config: cfg,
-		logger: logger,
-	}
-
 	db, err := openDB(cfg)
 	defer db.Close()
 
@@ -63,6 +60,12 @@ func main() {
 	}
 
 	logger.Info("database connection pool established")
+
+	app := &application{
+		config: cfg,
+		logger: logger,
+		models: data.NewModels(db),
+	}
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.port),

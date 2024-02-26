@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/makarellav/cinego/internal/data"
 	"github.com/makarellav/cinego/internal/validator"
 	"net/http"
@@ -38,7 +39,16 @@ func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	err = app.writeJSON(w, http.StatusCreated, envelope{"movie": input}, nil)
+	err = app.models.Movies.Insert(&movie)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+
+	headers := make(http.Header)
+	headers.Set("Location", fmt.Sprintf("/v1/movies/%d", movie.ID))
+
+	err = app.writeJSON(w, http.StatusCreated, envelope{"movie": movie}, headers)
 
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
