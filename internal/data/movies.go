@@ -78,15 +78,26 @@ func (m *MovieModel) Update(movie *Movie) error {
 	query := `
 		UPDATE movies 
 		SET title = $1, year = $2, runtime = $3, genres = $4, version = version + 1
-		WHERE id = $5
+		WHERE id = $5 AND version = $6
 		RETURNING version`
 
-	args := []any{movie.Title, movie.Year, movie.Runtime, movie.Genres, movie.ID}
+	args := []any{movie.Title, movie.Year, movie.Runtime, movie.Genres, movie.ID, movie.Version}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	return m.DB.QueryRow(ctx, query, args...).Scan(&movie.Version)
+	err := m.DB.QueryRow(ctx, query, args...).Scan(&movie.Version)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return ErrEditConflict
+		default:
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (m *MovieModel) Delete(id int64) error {
