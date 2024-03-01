@@ -8,6 +8,10 @@ import (
 func (app *application) routes() http.Handler {
 	r := chi.NewRouter()
 
+	if app.config.limiter.enabled {
+		r.Use(app.rateLimiter)
+	}
+
 	r.Use(app.recoverer)
 
 	r.NotFound(app.notFoundResponse)
