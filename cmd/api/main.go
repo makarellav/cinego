@@ -8,7 +8,6 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/makarellav/cinego/internal/data"
 	"log/slog"
-	"net/http"
 	"os"
 	"time"
 )
@@ -77,21 +76,12 @@ func main() {
 		models: data.NewModels(db),
 	}
 
-	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.port),
-		Handler:      app.routes(),
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  time.Minute,
-		ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelError),
+	err = app.serve()
+
+	if err != nil {
+		logger.Error(err.Error())
+		os.Exit(1)
 	}
-
-	logger.Info("starting the server", "addr", srv.Addr, "env", cfg.env)
-
-	err = srv.ListenAndServe()
-
-	logger.Error(err.Error())
-	os.Exit(1)
 }
 
 func openDB(cfg config) (*pgxpool.Pool, error) {
