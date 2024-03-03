@@ -27,6 +27,7 @@ func (app *application) routes() http.Handler {
 		r.Delete("/movies/{id}", app.deleteMovieHandler)
 
 		r.Post("/users", app.registerUserHandler)
+		r.Put("/users/activated", app.activateUserHandler)
 	})
 
 	return r

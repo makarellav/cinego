@@ -5,6 +5,7 @@ import (
 	"github.com/makarellav/cinego/internal/data"
 	"github.com/makarellav/cinego/internal/validator"
 	"net/http"
+	"time"
 )
 
 func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Request) {
@@ -58,8 +59,21 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	token, err := app.models.Tokens.New(user.ID, 24*time.Hour, data.ScopeActivation)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+
+		return
+	}
+
 	app.background(func() {
-		err = app.mailer.Send(user.Email, "user_welcome.gohtml", user)
+		emailData := map[string]any{
+			"userID":          user.ID,
+			"activationToken": token.Plaintext,
+		}
+
+		err = app.mailer.Send(user.Email, "user_welcome.gohtml", emailData)
 
 		if err != nil {
 			app.logger.Error(err.Error())
@@ -67,6 +81,73 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 	})
 
 	err = app.writeJSON(w, http.StatusAccepted, envelope{"user": user}, nil)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+
+		return
+	}
+}
+
+func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Token string `json:"token"`
+	}
+
+	err := app.readJSON(w, r, &input)
+
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+
+		return
+	}
+
+	v := validator.New()
+
+	if data.ValidateToken(v, input.Token); !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+
+		return
+	}
+
+	user, err := app.models.Users.GetByToken(data.ScopeActivation, input.Token)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			v.AddKey("token", "invalid or expired token")
+			app.failedValidationResponse(w, r, v.Errors)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+
+		return
+	}
+
+	user.Activated = true
+
+	err = app.models.Users.Update(user)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrEditConflict):
+			app.editConflictResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+
+		return
+	}
+
+	err = app.models.Tokens.DeleteAllForUser(data.ScopeActivation, user.ID)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+
+		return
+	}
+
+	err = app.writeJSON(w, http.StatusOK, envelope{"user": user}, nil)
 
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
