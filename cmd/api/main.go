@@ -7,8 +7,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/makarellav/cinego/internal/data"
+	"github.com/makarellav/cinego/internal/mailer"
 	"log/slog"
 	"os"
+	"strconv"
+	"sync"
 	"time"
 )
 
@@ -27,12 +30,21 @@ type config struct {
 		burst   int
 		enabled bool
 	}
+	smtp struct {
+		host     string
+		port     int
+		username string
+		password string
+		sender   string
+	}
 }
 
 type application struct {
 	config config
 	logger *slog.Logger
 	models *data.Models
+	mailer *mailer.Mailer
+	wg     sync.WaitGroup
 }
 
 func main() {
@@ -58,6 +70,19 @@ func main() {
 	flag.IntVar(&cfg.limiter.burst, "limiter_burst", 4, "Rate limiter maximum burst")
 	flag.BoolVar(&cfg.limiter.enabled, "limiter_enabled", true, "Enable rate limiter")
 
+	smtpPort, err := strconv.Atoi(os.Getenv("SMTP_PORT"))
+
+	if err != nil {
+		logger.Error(err.Error())
+		os.Exit(1)
+	}
+
+	flag.StringVar(&cfg.smtp.host, "smtp_host", os.Getenv("SMTP_HOST"), "SMTP host")
+	flag.IntVar(&cfg.smtp.port, "smtp_port", smtpPort, "SMTP port")
+	flag.StringVar(&cfg.smtp.username, "smtp_username", os.Getenv("SMTP_USERNAME"), "SMTP username")
+	flag.StringVar(&cfg.smtp.password, "smtp_password", os.Getenv("SMTP_PASSWORD"), "SMTP password")
+	flag.StringVar(&cfg.smtp.sender, "smtp_sender", os.Getenv("SMTP_SENDER"), "SMTP sender")
+
 	flag.Parse()
 
 	db, err := openDB(cfg)
@@ -74,6 +99,7 @@ func main() {
 		config: cfg,
 		logger: logger,
 		models: data.NewModels(db),
+		mailer: mailer.New(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender),
 	}
 
 	err = app.serve()

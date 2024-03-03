@@ -35,6 +35,9 @@ func (app *application) serve() error {
 		defer cancel()
 
 		errCh <- srv.Shutdown(ctx)
+
+		app.wg.Wait()
+		errCh <- nil
 	}()
 
 	app.logger.Info("starting the server", "addr", srv.Addr, "env", app.config.env)
