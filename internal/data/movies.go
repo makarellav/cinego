@@ -96,31 +96,28 @@ func (m *MovieModel) GetAll(title string, genres []string, filters Filters) ([]*
 	}
 
 	var totalRecords int
-	var movie Movie
-	var movies []*Movie
 
-	res, err := pgx.ForEachRow(rows,
-		[]any{
-			&totalRecords,
+	movies, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*Movie, error) {
+		var movie Movie
+
+		err := row.Scan(&totalRecords,
 			&movie.ID,
 			&movie.CreatedAt,
 			&movie.Title,
 			&movie.Year,
 			&movie.Runtime,
 			&movie.Genres,
-			&movie.Version,
-		}, func() error {
-			movies = append(movies, &movie)
+			&movie.Version)
 
-			return nil
-		})
+		return &movie, err
+	})
 
 	if err != nil {
 		return nil, Metadata{}, err
 	}
 
 	// return an empty array instead of null if there are no results
-	if res.RowsAffected() == 0 {
+	if len(movies) == 0 {
 		return []*Movie{}, Metadata{}, nil
 	}
 
